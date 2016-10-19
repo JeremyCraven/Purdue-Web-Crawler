@@ -7,6 +7,8 @@ import java.util.*;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 
 public class Crawler {
 	Connection connection;
@@ -71,40 +73,6 @@ public class Crawler {
 		stat.executeUpdate(query);
 		urlID++;
 	}
-
-/*
-	public String makeAbsoluteURL(String url, String parentURL) {
-		if (url.indexOf(":")<0) {
-			// the protocol part is already there.
-			return url;
-		}
-
-		if (url.length > 0 && url.charAt(0) == '/') {
-			// It starts with '/'. Add only host part.
-			int posHost = url.indexOf("://");
-			if (posHost <0) {
-				return url;
-			}
-			int posAfterHist = url.indexOf("/", posHost+3);
-			if (posAfterHist < 0) {
-				posAfterHist = url.Length();
-			}
-			String hostPart = url.substring(0, posAfterHost);
-			return hostPart + "/" + url;
-		} 
-
-		// URL start with a char different than "/"
-		int pos = parentURL.lastIndexOf("/");
-		int posHost = parentURL.indexOf("://");
-		if (posHost <0) {
-			return url;
-		}
-		
-		
-		
-
-	}
-*/
 
    	public void fetchURL(String urlScanned) {
 		try {
@@ -171,37 +139,80 @@ public class Crawler {
 		}
    	}
    	
-   	String getDescription(String url) throws IOException {
-   		Document doc = null;
-   		
-   		InputStream in = null;
-   		
-   		try {
-   			in = new URL(url).openStream();
-   			doc = Jsoup.parse(in, "ISO-8859-1", url);
-   		}
-   		catch (Exception e) {
-   			e.printStackTrace();
-   			doc = null;
+   	// Extract the document description
+   	String getMetaTag(Document doc, String attr) {
+   		if (doc == null)  {
+   			return null;
    		}
    		
-   		in.close();
+   		Elements elements = doc.select("meta[name=" + attr + "]");
    		
-   		String description = doc.text();
+   		for (Element e : elements) {
+   			String s = e.attr("content");
+   			
+   			if (s != null) {
+   				return s;
+   			}
+   		}
    		
-   		if (description.length() > 100) {
+   		elements = doc.select("meta[property=" + attr + "]");
+   		
+   		for (Element e : elements) {
+   			String s = e.attr("content");
+   			
+   			if (s != null) {
+   				return s;
+   			}
+   		}
+   		
+   		return null;
+   	}
+   	
+   	String getDescription(String url) throws IOException {   		
+   		Document doc = Jsoup.connect(url).get();
+   		
+   		String description = this.getMetaTag(doc, "description");
+   		
+   		if (description == null) {
+   			description = this.getMetaTag(doc, "og:description");
+   		}
+   		
+   		if (description == null) {
+   			description = doc.text();
+   		}
+   		
+   		if (description != null && description.length() > 100) {
    			description = description.substring(0, 100);
+   		}
+   		else if (description == null) {
+   			description = "NO DESCRIPTION";
    		}
    		
    		return description;
    	}
    	
-   	void startCrawl() {   		
+   	void fetchURLS(String url) throws IOException {
+   		Document doc = Jsoup.connect(url).get();
+   		Elements elems = doc.select("a");
+   		
+   		for (Element e : elems) {   			
+   			String absURL = e.attr("abs:href");
+   			
+   			// Check if url in DB, if yes increment rank, if not add
+   		}
+   	}
+   	
+   	void initCrawl() {   		
    		try {
    			this.readProperties();
    			this.createDB();
-   			insertURLInDB(this.props.getProperty("crawler.root"));
-   			NextURLID++;
+   			
+   			String[] roots = this.props.getProperty("crawler.roots").split(",");
+   			
+   			for (String root : roots) {
+   				this.insertURLInDB(root);
+   				NextURLID++;
+   			}
    			
    			this.crawl();
    		}
@@ -210,34 +221,24 @@ public class Crawler {
    		}
    	}
    	
-   	void crawl() {
+   	void crawl() throws IOException {
    		while (NextURLIDScanned < NextURLID) {   			
-   			String url = getNextURL();
-   			try {
-   				String description = getDescription(url);
-   				System.out.println(description);
-   			}
-   			catch (Exception e) {
-   				
-   			}
+   			String url = this.getNextURL();
+   			String description = this.getDescription(url);
    			
-   			System.out.println(url);   			
+   			// TODO: Add to description to the table
+   			System.out.println(description);
    			
+   			// Get urls
+   			this.fetchURLS(url);
    			
-   			// Get the first 100 characters of document
-   			// Add to the description
+   			//System.out.println(url);   			
    		}
    	}
 
    	public static void main(String[] args) {
 		Crawler crawler = new Crawler();
-		
-		try {
-			crawler.startCrawl();
-		}
-		catch (Exception e) {
-			e.printStackTrace();
-		}
+		crawler.initCrawl();
     }
 }
 
