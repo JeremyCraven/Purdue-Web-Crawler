@@ -30,6 +30,17 @@ public class Crawler implements Runnable {
 		this.initCrawl();
 	}
 	
+	Crawler(Properties p) {
+		try {
+			this.props = p;
+			
+			openConnection();
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+	
 	// Start a thread
 	public void run() {
 		try {
@@ -41,29 +52,29 @@ public class Crawler implements Runnable {
 	}
 
 	// Read from properties file
-	public synchronized void readProperties() throws IOException {
+	public void readProperties() throws IOException {
 		synchronized(varLock) {
 			props = new Properties();
-	      	FileInputStream in = new FileInputStream("database.properties");
+	      	FileInputStream in = new FileInputStream("WebContent/WEB-INF/database.properties");
 	      	props.load(in);
 	      	in.close();
 		}
 	}
 	
-	public synchronized void updateProperties() throws IOException {
-		FileOutputStream out = new FileOutputStream("database.properties");
-		
-		props.setProperty("crawler.NextURLID", NextURLID + "");
-		props.setProperty("crawler.NextURLIDScanned", NextURLIDScanned + "");
-	    
+	public void updateProperties() throws IOException {
 		synchronized(varLock) {
+			FileOutputStream out = new FileOutputStream("database.properties");
+			
+			props.setProperty("crawler.NextURLID", NextURLID + "");
+			props.setProperty("crawler.NextURLIDScanned", NextURLIDScanned + "");
+			
 			props.store(out, null);
+			
+			out.close();
 		}
-		
-	    out.close();
 	}
 	
-	public synchronized void updateVariables() {
+	public void updateVariables() {
 		synchronized(varLock) {
 			NextURLID = Integer.parseInt(props.getProperty("crawler.NextURLID"));
 		    NextURLIDScanned = Integer.parseInt(props.getProperty("crawler.NextURLIDScanned"));
@@ -118,7 +129,7 @@ public class Crawler implements Runnable {
 		}
 	}
 
-	public synchronized void insertURLInDB(String url) throws SQLException, IOException {
+	public void insertURLInDB(String url) throws SQLException, IOException {
 		synchronized(urlTableLock) {
 			Statement stat = connection.createStatement();
 			String query = "INSERT INTO URLS VALUES ('" + NextURLID + "','" + url + "','')";
@@ -130,7 +141,7 @@ public class Crawler implements Runnable {
 		}
 	}
 	
-	public synchronized boolean wordInDB(String word) throws SQLException, IOException {
+	public boolean wordInDB(String word) throws SQLException, IOException {
 		synchronized(wordTableLock) {
 			Statement stat = connection.createStatement();
 			ResultSet result = stat.executeQuery("SELECT * FROM words WHERE word LIKE '" + word + "'");
@@ -146,7 +157,7 @@ public class Crawler implements Runnable {
 		}
 	}
 	
-	public synchronized void insertWordInDB(String word, String urllist) throws SQLException, IOException {
+	public void insertWordInDB(String word, String urllist) throws SQLException, IOException {
 		synchronized(wordTableLock) {
 			Statement stat = connection.createStatement();
 			String query = "INSERT INTO WORDS VALUES ('" + word + "','" + urllist + "')";
@@ -155,7 +166,7 @@ public class Crawler implements Runnable {
 		}
 	}
 	
-	public synchronized String getWordList(String word) throws SQLException {
+	public String getWordList(String word) throws SQLException {
 		synchronized(wordTableLock) {
 			PreparedStatement pst = connection.prepareStatement("SELECT * FROM WORDS WHERE word = ?");
 			pst.setString(1, word);
@@ -181,13 +192,17 @@ public class Crawler implements Runnable {
 		try {
 			stat = connection.createStatement();
    			result = stat.executeQuery("SELECT * FROM urls WHERE urlid = " + this.NextURLIDScanned);
-		
-   			result.next();
-   			String url = result.getString(2);
-   			stat.close();
+   			String url = null;
    			
-   			NextURLIDScanned++;
-   			this.updateProperties();
+   			boolean exists = result.next();
+   			
+   			if (exists) {
+   				url = result.getString(2);
+   				NextURLIDScanned++;
+   				this.updateProperties();
+   			}
+   			
+   			stat.close();
    			
    			return url;
 		}
@@ -264,7 +279,25 @@ public class Crawler implements Runnable {
    		return description;
    	}
    	
-   	public synchronized void updateDescription(String url, String description) throws SQLException {
+   	public detailedURL getDetails(int urlid) throws SQLException {
+   		PreparedStatement pst = connection.prepareStatement("SELECT * FROM urls WHERE urlid = ?");
+   		pst.setInt(1, urlid);
+   		
+   		ResultSet res = pst.executeQuery();
+   		if(res.next()) {
+   			String url = res.getString(2);
+   	   		String description = res.getString(3);
+   	   		
+   	   		detailedURL detail = new detailedURL(urlid, url, description);
+   	   		
+   	   		return detail;
+   		}
+   		else {
+   			return null;
+   		}
+   	}
+   	
+   	public void updateDescription(String url, String description) throws SQLException {
    		synchronized(urlTableLock) {
    			PreparedStatement pst = connection.prepareStatement("UPDATE urls SET description = ? WHERE url = ?");
    			pst.setString(1, description);
@@ -406,13 +439,16 @@ public class Crawler implements Runnable {
    		
    		while (NextURLIDScanned < NextURLID) {
    			String url = this.getNextURL();
-   			String description = this.getDescription(url);
    			
-   			// Add description to the table
-   			updateDescription(url, description);
-   			
-   			// Get URLS
-   			this.fetchURLS(url);  			
+   			if (url != null) {
+   				String description = this.getDescription(url);
+   	   			
+   	   			// Add description to the table
+   	   			updateDescription(url, description);
+   	   			
+   	   			// Get URLS
+   	   			this.fetchURLS(url); 
+   			}	 			
    		}
    	}
 
@@ -421,7 +457,7 @@ public class Crawler implements Runnable {
    		
 		Crawler crawler = new Crawler();
 		
-		boolean concurrent = false;
+		boolean concurrent = true;
 		
 		if (concurrent) {
 			Thread threads[] = new Thread[numThreads];
