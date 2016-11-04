@@ -64,7 +64,7 @@ public class Crawler implements Runnable {
 	
 	public void updateProperties() throws IOException {
 		synchronized(varLock) {
-			FileOutputStream out = new FileOutputStream("database.properties");
+			FileOutputStream out = new FileOutputStream("WebContent/WEB-INF/database.properties");
 			
 			props.setProperty("crawler.NextURLID", NextURLID + "");
 			props.setProperty("crawler.NextURLIDScanned", NextURLIDScanned + "");
@@ -248,7 +248,9 @@ public class Crawler implements Runnable {
    		String description;
    		
    		try {
-   			doc = Jsoup.connect(url).get();
+   			if (validURL(url)) {
+   				doc = Jsoup.connect(url).get();
+   			}
    		}
    		catch (Exception e) {
    			e.printStackTrace();
@@ -309,34 +311,45 @@ public class Crawler implements Runnable {
    	}
    	
    	boolean validURL(String url) {
-   		String[] schemes = {"http", "https"};
-   		
-   		UrlValidator urlVal = new UrlValidator(schemes);
-   		
-   		if (urlVal.isValid(url)) {
-   			if (url.contains(domain)) {
-   				// TODO: check if html (NOT PDF)
-   				if (url.contains(".pdf")) {
-   					return false;
-   				}
-   				else {
+		if (url.contains(domain)) {
+			// Check header for content type
+			try {
+				URL testHTML = new URL(url);
+   				HttpURLConnection urlc = (HttpURLConnection)testHTML.openConnection();
+   				
+   				urlc.setAllowUserInteraction(false);
+   				urlc.setDoInput(true);
+   				urlc.setDoOutput(false);
+   				urlc.setUseCaches(true);
+   				urlc.setRequestMethod("HEAD");
+   				urlc.connect();
+   				String mime = urlc.getContentType();
+   				
+   				if (mime.contains("text/html")) {
    					return true;
    				}
-   			}
-   			else {
-   				return true;
-   			}
-   		}
-   		else {
-   			return false;
-   		}
+   				else {
+   					return false;
+   				}
+			}
+			catch (Exception e) {
+				return false;
+			}
+		}
+		else {
+			return false;
+		}
    	}
    	
    	void fetchURLS(String url) throws IOException, SQLException {
+   		System.out.println("Processing: " + url);
+   		
    		Document doc = null;
    		
    		try {
-   			doc = Jsoup.connect(url).get();
+   			if (validURL(url)) {
+   				doc = Jsoup.connect(url).get();
+   			}
    		}
    		catch (Exception e) {
    			e.printStackTrace();
@@ -351,7 +364,7 @@ public class Crawler implements Runnable {
    	   			// Check if valid
    	   			if (validURL(absURL)) {   				
    	   				if (urlInDB(absURL)) {
-   	   					// Increment rank
+   	   					// TODO: Increment rank
    	   				}
    	   				else {
    	   					// Add if nextURLID < maxURLS
@@ -360,10 +373,11 @@ public class Crawler implements Runnable {
    	   					}
    	   				}
    	   			}
+   	   			else {
+   	   				System.out.println("Invalid URL: " + absURL);
+   	   			}
    	   		}
    		}
-   		
-   		System.out.println("Processing: " + url);
    		
    		// Analyze words and add to database
    		analyzeWords(doc);
@@ -373,45 +387,47 @@ public class Crawler implements Runnable {
    		updateProperties();
    	}
    	
-   	public void analyzeWords(Document doc) throws IOException, SQLException {   		
+   	public void analyzeWords(Document doc) throws IOException, SQLException {  
+   		if (doc != null) {
    		// Get text of the document
-		String text = doc.text();
-		
-		// Only keep alphanumeric characters
-		text = text.replaceAll("[^A-Za-z0-9 ]", "");
-		
-		// Convert all to lower case
-		text = text.toLowerCase();
-		
-		// Split on all space characters
-		String[] words = text.split("\\s+");
-		
-		System.out.println("Words Count: " + words.length);
-		
-		// Process each word
-		for (String word : words) {
-			int urlIndex = NextURLIDScanned - 1;
-			
-			if (wordInDB(word)) {
-				String urlList = getWordList(word);
-				
-				// Add the urlIndex to the word if not already there
-				if (!urlList.contains(" " + urlIndex + " ")) {
-					urlList += (", " + urlIndex + " ");
-					
-					synchronized(wordLock) {
-						PreparedStatement pst = connection.prepareStatement("UPDATE WORDS SET urllist = ? WHERE word = ?");
-						pst.setString(1, urlList);
-						pst.setString(2, word);
-						pst.executeUpdate();
-						pst.close();
-					}
-				}
-			}
-			else {
-				this.insertWordInDB(word, " " + urlIndex + " ");
-			}
-		}
+   			String text = doc.text();
+   			
+   			// Only keep alphanumeric characters
+   			text = text.replaceAll("[^A-Za-z0-9 ]", "");
+   			
+   			// Convert all to lower case
+   			text = text.toLowerCase();
+   			
+   			// Split on all space characters
+   			String[] words = text.split("\\s+");
+   			
+   			System.out.println("Words Count: " + words.length);
+   			
+   			// Process each word
+   			for (String word : words) {
+   				int urlIndex = NextURLIDScanned - 1;
+   				
+   				if (wordInDB(word)) {
+   					String urlList = getWordList(word);
+   					
+   					// Add the urlIndex to the word if not already there
+   					if (!urlList.contains(" " + urlIndex + " ")) {
+   						urlList += (", " + urlIndex + " ");
+   						
+   						synchronized(wordLock) {
+   							PreparedStatement pst = connection.prepareStatement("UPDATE WORDS SET urllist = ? WHERE word = ?");
+   							pst.setString(1, urlList);
+   							pst.setString(2, word);
+   							pst.executeUpdate();
+   							pst.close();
+   						}
+   					}
+   				}
+   				else {
+   					this.insertWordInDB(word, " " + urlIndex + " ");
+   				}
+   			}
+   		}
    	}
    	
    	void initCrawl() {   		
@@ -458,7 +474,7 @@ public class Crawler implements Runnable {
    		
 		Crawler crawler = new Crawler();
 		
-		boolean concurrent = true;
+		boolean concurrent = false;
 		
 		if (concurrent) {
 			Thread threads[] = new Thread[numThreads];
