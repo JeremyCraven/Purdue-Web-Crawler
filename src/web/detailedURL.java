@@ -1,3 +1,4 @@
+package web;
 import java.util.*;
 
 public class detailedURL {
@@ -5,13 +6,13 @@ public class detailedURL {
 	private String url;
 	private String description;
 	
-	detailedURL() {
+	public detailedURL() {
 		urlid = -1;
 		url = null;
 		description = null;		
 	}
 	
-	detailedURL(int urlid, String url, String description) {
+	public detailedURL(int urlid, String url, String description) {
 		this.urlid = urlid;
 		this.url = url;
 		this.description = description;

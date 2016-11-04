@@ -11,10 +11,12 @@ import javax.servlet.http.HttpServletResponse;
 
 import java.util.*;
 
+import web.detailedURL;
+
 /**
  * Servlet implementation class searchEngine
  */
-@WebServlet("/searchEngine")
+@WebServlet(description = "Search Engine", urlPatterns = {"/searchEngine"})
 public class searchEngine extends HttpServlet {
 	private static final long serialVersionUID = 1L;
 	private Properties props;
@@ -23,7 +25,7 @@ public class searchEngine extends HttpServlet {
 	 * @see HttpServlet#doGet(HttpServletRequest request, HttpServletResponse response)
 	 */
 	protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-		response.getWriter().append("Served at: ").append(request.getContextPath());
+		//response.getWriter().append("Served at: ").append(request.getContextPath());
 	}
 
 	/**
@@ -31,13 +33,12 @@ public class searchEngine extends HttpServlet {
 	 */
 	protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
 		response.setContentType("text/html");
-		ServletOutputStream out = response.getOutputStream();
 		
 		readProperties();
 		
 		try {
 			String query = request.getParameter("query");
-			String nextJSP = "/searchResults.jsp";
+			String nextJSP = "/WEB-INF/searchResults.jsp";
 			
 			// Parse query
 			query = query.toLowerCase();
@@ -74,7 +75,7 @@ public class searchEngine extends HttpServlet {
 				request.setAttribute("query", query);
 				request.setAttribute("searchResults", null);
 				
-				RequestDispatcher dispatch = getServletContext().getRequestDispatcher(nextJSP);
+				RequestDispatcher dispatch = this.getServletContext().getRequestDispatcher(nextJSP);
 				dispatch.forward(request, response);
 			}
 			else {
@@ -96,19 +97,11 @@ public class searchEngine extends HttpServlet {
 						}
 					}
 					
-					ArrayList<ArrayList<String>> stringSearchResults = new ArrayList<ArrayList<String>>();
-					
-					for (detailedURL d : searchResults) {
-						stringSearchResults.add(d.detailsToString());
-					}
-					
 					request.setAttribute("query", query);
-					request.setAttribute("searchResults", stringSearchResults);
+					request.setAttribute("searchResults", searchResults);
 					
-					//RequestDispatcher dispatch = getServletContext().getRequestDispatcher(nextJSP);
-					//dispatch.forward(request, response);
-					
-					response.sendRedirect("/crawler/searchResults.jsp");
+					RequestDispatcher dispatch = this.getServletContext().getRequestDispatcher(nextJSP);
+					dispatch.forward(request, response);
 				}
 				else {
 					// Empty Search
@@ -121,7 +114,10 @@ public class searchEngine extends HttpServlet {
 			}
 		}
 		catch (Exception e) {
-			e.printStackTrace();
+			//e.printStackTrace();
+			
+			RequestDispatcher dispatch = this.getServletContext().getRequestDispatcher("/WEB-INF/searchResults.jsp");
+			dispatch.forward(request, response);
 		}
 	}
 

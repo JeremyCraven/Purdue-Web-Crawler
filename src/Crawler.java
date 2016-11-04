@@ -11,6 +11,7 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
 import org.apache.commons.validator.routines.UrlValidator;
+import web.detailedURL;
 
 public class Crawler implements Runnable {
 	private final Object varLock = new Object();
