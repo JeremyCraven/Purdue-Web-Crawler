@@ -1,10 +1,11 @@
 package web;
-import java.util.*;
 
 public class detailedURL {
 	private int urlid;
 	private String url;
 	private String description;
+	private String title;
+	private String image;
 	
 	public detailedURL() {
 		urlid = -1;
@@ -12,10 +13,12 @@ public class detailedURL {
 		description = null;		
 	}
 	
-	public detailedURL(int urlid, String url, String description) {
+	public detailedURL(int urlid, String url, String description, String title, String image) {
 		this.urlid = urlid;
 		this.url = url;
 		this.description = description;
+		this.title = title;
+		this.image = image;
 	}
 	
 	public int getURLID() {
@@ -30,6 +33,14 @@ public class detailedURL {
 		return this.description;
 	}
 	
+	public String getTitle() {
+		return this.title;
+	}
+	
+	public String getImage() {
+		return this.image;
+	}
+	
 	public void setURLID(int urlid) {
 		this.urlid = urlid;
 	}
@@ -42,7 +53,15 @@ public class detailedURL {
 		this.description = description;
 	}
 	
-	public ArrayList<String> detailsToString() {
+	public void setTitle(String title) {
+		this.title = title;
+	}
+	
+	public void setImage(String image) {
+		this.image = image;
+	}
+	
+	/*public ArrayList<String> detailsToString() {
 		ArrayList<String> tmp = new ArrayList<String>();
 		
 		tmp.add(String.valueOf(getURLID()));
@@ -50,5 +69,5 @@ public class detailedURL {
 		tmp.add(getDescription());
 		
 		return tmp;
-	}
+	}*/
 }

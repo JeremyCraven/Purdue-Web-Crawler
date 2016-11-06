@@ -1,7 +1,5 @@
 import java.io.*;
 import java.net.*;
-import java.util.regex.*;
-import javax.servlet.annotation.WebServlet;
 import java.sql.*;
 import java.util.*;
 
@@ -10,7 +8,6 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
-import org.apache.commons.validator.routines.UrlValidator;
 import web.detailedURL;
 
 public class Crawler implements Runnable {
@@ -109,7 +106,7 @@ public class Crawler implements Runnable {
 		}
 			
 		// Create the table
-        stat.executeUpdate("CREATE TABLE URLS (urlid INT, url VARCHAR(512), description VARCHAR(200))");
+        stat.executeUpdate("CREATE TABLE URLS (urlid INT, url VARCHAR(512), description VARCHAR(200), image VARCHAR(512), rank INT, title VARCHAR(200))");
         stat.executeUpdate("CREATE TABLE WORDS (word VARCHAR(2048), urllist VARCHAR(16384))");
         stat.close();
 	}
@@ -131,11 +128,13 @@ public class Crawler implements Runnable {
 	}
 
 	public void insertURLInDB(String url) throws SQLException, IOException {
-		synchronized(urlTableLock) {
-			Statement stat = connection.createStatement();
-			String query = "INSERT INTO URLS VALUES ('" + NextURLID + "','" + url + "','')";
-			stat.executeUpdate(query);
-			stat.close();
+		synchronized(urlTableLock) {			
+			PreparedStatement pst = connection.prepareStatement("INSERT INTO URLS (urlid, url, rank) VALUES(?, ?, ?)");
+			pst.setInt(1, NextURLID);
+			pst.setString(2, url);
+			pst.setInt(3, 1);
+			pst.executeUpdate();
+			pst.close();
 			
 			NextURLID++;
 			updateProperties();
@@ -159,11 +158,31 @@ public class Crawler implements Runnable {
 	}
 	
 	public void insertWordInDB(String word, String urllist) throws SQLException, IOException {
-		synchronized(wordTableLock) {
-			Statement stat = connection.createStatement();
-			String query = "INSERT INTO WORDS VALUES ('" + word + "','" + urllist + "')";
-			stat.executeUpdate(query);
-			stat.close();
+		synchronized(wordTableLock) {			
+			PreparedStatement pst = connection.prepareStatement("INSERT INTO WORDS VALUES(?, ?)");
+			pst.setString(1, word);
+			pst.setString(2, urllist);
+			pst.executeUpdate();
+			pst.close();
+		}
+	}
+	
+	public void incrementRank(String url) throws SQLException {
+		synchronized(urlTableLock) {
+			PreparedStatement pst = connection.prepareStatement("SELECT * FROM URLS WHERE url = ?");
+			pst.setString(1, url);
+			ResultSet result = pst.executeQuery();
+			result.next();
+			
+			// Get old rank
+			int prevRank = result.getInt(5);
+			pst.close();
+			
+			PreparedStatement pst2 = connection.prepareStatement("UPDATE urls SET rank = ? WHERE url = ?");
+			pst2.setInt(1, prevRank + 1);
+			pst2.setString(2, url);
+			pst2.executeUpdate();
+			pst2.close();
 		}
 	}
 	
@@ -243,45 +262,6 @@ public class Crawler implements Runnable {
    		return null;
    	}
    	
-   	String getDescription(String url) throws IOException {
-   		Document doc = null;
-   		String description;
-   		
-   		try {
-   			if (validURL(url)) {
-   				doc = Jsoup.connect(url).get();
-   			}
-   		}
-   		catch (Exception e) {
-   			e.printStackTrace();
-   		}
-   		
-   		if (doc != null) {
-   			description = this.getMetaTag(doc, "description");
-   	   		
-   	   		if (description == null) {
-   	   			description = this.getMetaTag(doc, "og:description");
-   	   		}
-   	   		
-   	   		if (description == null) {
-   	   			description = doc.text();
-   	   		}
-   	   		
-   	   		if (description != null && description.length() > 100) {
-   	   			description = description.substring(0, 100);
-   	   		}
-   	   		else if (description == null) {
-   	   			description = "NO DESCRIPTION";
-   	   		}
-   		}
-   		else {
-   			description = "NO DESCRIPTION";
-   		}
-   		
-   		
-   		return description;
-   	}
-   	
    	public detailedURL getDetails(int urlid) throws SQLException {
    		PreparedStatement pst = connection.prepareStatement("SELECT * FROM urls WHERE urlid = ?");
    		pst.setInt(1, urlid);
@@ -290,8 +270,10 @@ public class Crawler implements Runnable {
    		if(res.next()) {
    			String url = res.getString(2);
    	   		String description = res.getString(3);
+   	   		String image = res.getString(4);
+   	   		String title = res.getString(6);
    	   		
-   	   		detailedURL detail = new detailedURL(urlid, url, description);
+   	   		detailedURL detail = new detailedURL(urlid, url, description, title, image);
    	   		
    	   		return detail;
    		}
@@ -300,11 +282,60 @@ public class Crawler implements Runnable {
    		}
    	}
    	
-   	public void updateDescription(String url, String description) throws SQLException {
+   	String getDescription(Document doc) throws IOException {
+   		String description;
+   		
+		description = this.getMetaTag(doc, "description");
+   		
+   		if (description == null) {
+   			description = this.getMetaTag(doc, "og:description");
+   		}
+   		
+   		if (description == null && doc.body().text() != null) {
+   			description = doc.body().text();
+   		}
+   		
+   		if (description == null) {
+   			description = doc.text();
+   		}
+   		
+   		if (description != null && description.length() > 100) {
+   			description = description.substring(0, 100);
+   		}
+   		else if (description == null) {
+   			description = "NO DESCRIPTION";
+   		}
+   		
+   		return description;
+   	}
+   	
+   	String getTitle(Document doc) {
+   		String title;
+   		
+   		title = doc.title();
+   		
+   		return title;
+   	}
+   	
+   	String getImage(Document doc) {
+   		Elements images = doc.select("img");
+   		String image = null;
+   		
+   		for (Element e : images) {
+   			image = e.attr("abs:src");
+   			break;
+   		}
+   		
+   		return image;
+   	}
+   	   	
+   	public void updateURL(String url, String description, String imageURL, String title) throws SQLException {
    		synchronized(urlTableLock) {
-   			PreparedStatement pst = connection.prepareStatement("UPDATE urls SET description = ? WHERE url = ?");
+   			PreparedStatement pst = connection.prepareStatement("UPDATE urls SET description = ?, image = ?, title = ? WHERE url = ?");
    			pst.setString(1, description);
-   			pst.setString(2, url);
+   			pst.setString(2, imageURL);
+   			pst.setString(3, title);
+   			pst.setString(4, url);
    			pst.executeUpdate();
    			pst.close();
    		}
@@ -341,6 +372,20 @@ public class Crawler implements Runnable {
 		}
    	}
    	
+   	public String parseURL(String url) {
+   		String parsedURL = url.replaceAll("/index.html", "");
+   		parsedURL = parsedURL.replaceAll("/[a-zA-Z_0-9]+.php", "");
+   		parsedURL = parsedURL.replaceAll("#[a-zA-Z_0-9]*", "");
+   		
+  		int len = parsedURL.length();
+  		
+		if (len > 0 && parsedURL.charAt(len - 1) == '/') {
+			parsedURL = parsedURL.substring(0, len - 1);
+		}
+		
+		return parsedURL;
+   	}
+   	
    	void fetchURLS(String url) throws IOException, SQLException {
    		System.out.println("Processing: " + url);
    		
@@ -356,25 +401,30 @@ public class Crawler implements Runnable {
    		}
    		
    		if (doc != null) {
+   			String description = getDescription(doc);   			
+   			String imageURL = getImage(doc);
+   			String title = getTitle(doc);
+   			
+   			// Update description and image for URL
+   			updateURL(url, description, imageURL, title);
+   			
    			Elements elems = doc.select("a");
    	   		
    	   		for (Element e : elems) {   			
    	   			String absURL = e.attr("abs:href");
+   	   			String parsedURL = parseURL(absURL);
    	   			
    	   			// Check if valid
-   	   			if (validURL(absURL)) {   				
-   	   				if (urlInDB(absURL)) {
-   	   					// TODO: Increment rank
+   	   			if (validURL(parsedURL)) {   				
+   	   				if (urlInDB(parsedURL)) {
+   	   					incrementRank(parsedURL);
    	   				}
    	   				else {
    	   					// Add if nextURLID < maxURLS
    	   					if (NextURLID < maxURLS) {
-   	   						this.insertURLInDB(absURL);
+   	   						this.insertURLInDB(parsedURL);
    	   					}
    	   				}
-   	   			}
-   	   			else {
-   	   				System.out.println("Invalid URL: " + absURL);
    	   			}
    	   		}
    		}
@@ -383,7 +433,6 @@ public class Crawler implements Runnable {
    		analyzeWords(doc);
    		
    		// Update properties
-   		NextURLIDScanned++;
    		updateProperties();
    	}
    	
@@ -438,12 +487,14 @@ public class Crawler implements Runnable {
    			String[] roots = this.props.getProperty("crawler.roots").split(",");
    			maxURLS = Integer.parseInt(this.props.getProperty("crawler.maxurls"));
    			domain = this.props.getProperty("crawler.domain");
+   			NextURLIDScanned = 0;
+   			NextURLID = 0;
    			
    			for (String root : roots) {
-   				this.insertURLInDB(root);
+   				String parsedRoot = parseURL(root);
+   				this.insertURLInDB(parsedRoot);
    			}
    			
-   			this.updateVariables();
    			this.updateProperties();
    		}
    		catch (Exception e) {
@@ -457,12 +508,7 @@ public class Crawler implements Runnable {
    		while (NextURLIDScanned < NextURLID) {
    			String url = this.getNextURL();
    			
-   			if (url != null) {
-   				String description = this.getDescription(url);
-   	   			
-   	   			// Add description to the table
-   	   			updateDescription(url, description);
-   	   			
+   			if (url != null) {   	   			
    	   			// Get URLS
    	   			this.fetchURLS(url); 
    			}	 			
