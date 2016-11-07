@@ -2,6 +2,7 @@ import java.io.*;
 import java.net.*;
 import java.sql.*;
 import java.util.*;
+import java.io.PrintWriter;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -16,7 +17,9 @@ public class Crawler implements Runnable {
 	private final Object urlTableLock = new Object();
 	private final Object wordTableLock = new Object();
 	private final static int numThreads = 5;
+	
 	Connection connection;
+	PrintWriter writer;
 	
 	int NextURLID, NextURLIDScanned, maxURLS;
 	public Properties props;
@@ -159,6 +162,9 @@ public class Crawler implements Runnable {
 	
 	public void insertWordInDB(String word, String urllist) throws SQLException, IOException {
 		synchronized(wordTableLock) {			
+			writer.print(", \"" + word + "\": null");
+			writer.flush();
+			
 			PreparedStatement pst = connection.prepareStatement("INSERT INTO WORDS VALUES(?, ?)");
 			pst.setString(1, word);
 			pst.setString(2, urllist);
@@ -204,7 +210,7 @@ public class Crawler implements Runnable {
    	
    	// Get the next URL from the URLS table
    	public synchronized String getNextURL() {
-   		this.updateVariables();
+   		//this.updateVariables();
    		
    		Statement stat;
 		ResultSet result;
@@ -272,8 +278,9 @@ public class Crawler implements Runnable {
    	   		String description = res.getString(3);
    	   		String image = res.getString(4);
    	   		String title = res.getString(6);
+   	   		int rank = res.getInt(5);
    	   		
-   	   		detailedURL detail = new detailedURL(urlid, url, description, title, image);
+   	   		detailedURL detail = new detailedURL(urlid, url, description, title, image, rank);
    	   		
    	   		return detail;
    		}
@@ -299,11 +306,16 @@ public class Crawler implements Runnable {
    			description = doc.text();
    		}
    		
+   		if (description == null) {
+   			description = "NO DESCRIPTION";
+   		}
+   		
+   		while (description.length() > 100 && !Character.isAlphabetic(description.charAt(0))) {
+   			description = description.substring(1);
+   		}
+   		
    		if (description != null && description.length() > 100) {
    			description = description.substring(0, 100);
-   		}
-   		else if (description == null) {
-   			description = "NO DESCRIPTION";
    		}
    		
    		return description;
@@ -320,10 +332,15 @@ public class Crawler implements Runnable {
    	String getImage(Document doc) {
    		Elements images = doc.select("img");
    		String image = null;
+   		int count = 0;
    		
    		for (Element e : images) {
    			image = e.attr("abs:src");
-   			break;
+   			count++;
+   			
+   			if (count == 2) {
+   				break;
+   			}
    		}
    		
    		return image;
@@ -489,6 +506,10 @@ public class Crawler implements Runnable {
    			domain = this.props.getProperty("crawler.domain");
    			NextURLIDScanned = 0;
    			NextURLID = 0;
+   			
+   			writer = new PrintWriter("./WebContent/data/autocomplete.txt", "UTF-8");
+   			writer.print("\"Jeremy\": null");
+   			writer.flush();
    			
    			for (String root : roots) {
    				String parsedRoot = parseURL(root);

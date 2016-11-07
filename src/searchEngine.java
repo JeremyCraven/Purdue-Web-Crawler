@@ -97,6 +97,8 @@ public class searchEngine extends HttpServlet {
 						}
 					}
 					
+					Collections.sort(searchResults);
+					
 					request.setAttribute("query", query);
 					request.setAttribute("searchResults", searchResults);
 					

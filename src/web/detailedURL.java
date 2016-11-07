@@ -1,24 +1,29 @@
 package web;
 
-public class detailedURL {
+public class detailedURL implements Comparable<detailedURL> {
 	private int urlid;
 	private String url;
 	private String description;
 	private String title;
 	private String image;
+	private int rank;
 	
 	public detailedURL() {
 		urlid = -1;
 		url = null;
-		description = null;		
+		description = null;	
+		title = null;
+		image = null;
+		rank = -1;
 	}
 	
-	public detailedURL(int urlid, String url, String description, String title, String image) {
+	public detailedURL(int urlid, String url, String description, String title, String image, int rank) {
 		this.urlid = urlid;
 		this.url = url;
 		this.description = description;
 		this.title = title;
 		this.image = image;
+		this.rank = rank;
 	}
 	
 	public int getURLID() {
@@ -41,6 +46,10 @@ public class detailedURL {
 		return this.image;
 	}
 	
+	public int getRank() {
+		return this.rank;
+	}
+	
 	public void setURLID(int urlid) {
 		this.urlid = urlid;
 	}
@@ -61,13 +70,12 @@ public class detailedURL {
 		this.image = image;
 	}
 	
-	/*public ArrayList<String> detailsToString() {
-		ArrayList<String> tmp = new ArrayList<String>();
-		
-		tmp.add(String.valueOf(getURLID()));
-		tmp.add(getURL());
-		tmp.add(getDescription());
-		
-		return tmp;
-	}*/
+	public void setRank(int rank) {
+		this.rank = rank;
+	}
+
+	@Override
+	public int compareTo(detailedURL dURL) {
+		return this.getRank() - dURL.getRank();
+	}
 }
