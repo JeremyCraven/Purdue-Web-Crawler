@@ -76,6 +76,6 @@ public class detailedURL implements Comparable<detailedURL> {
 
 	@Override
 	public int compareTo(detailedURL dURL) {
-		return this.getRank() - dURL.getRank();
+		return dURL.getRank() - this.getRank();
 	}
 }
